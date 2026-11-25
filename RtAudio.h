@@ -296,6 +296,8 @@ class RTAUDIO_DLL_PUBLIC RtAudio
     unsigned int currentSampleRate{};   /*!< Current sample rate, system sample rate as currently configured. */
     unsigned int preferredSampleRate{}; /*!< Preferred sample rate, e.g. for WASAPI the system sample rate. */
     RtAudioFormat nativeFormats{};  /*!< Bit mask of supported data formats. */
+    std::string inputUid;
+    std::string outputUid;
   };
 
   //! The structure for specifying input or output stream parameters.

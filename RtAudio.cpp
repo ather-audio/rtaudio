@@ -1125,6 +1125,23 @@ static OSStatus streamDisconnectListener( AudioObjectID /*id*/,
   return kAudioHardwareNoError;
 }
 
+static std::string coreAudioDeviceUid( AudioDeviceID id )
+{
+  CFStringRef cfuid = NULL;
+  UInt32 dataSize = sizeof( CFStringRef );
+  AudioObjectPropertyAddress property = { kAudioDevicePropertyDeviceUID,
+                                          kAudioObjectPropertyScopeGlobal,
+                                          KAUDIOOBJECTPROPERTYELEMENT };
+  if ( AudioObjectGetPropertyData( id, &property, 0, NULL, &dataSize, &cfuid ) != noErr || cfuid == NULL )
+    return std::string();
+  std::string uid;
+  char buffer[1024];
+  if ( CFStringGetCString( cfuid, buffer, sizeof( buffer ), kCFStringEncodingUTF8 ) )
+    uid = buffer;
+  CFRelease( cfuid );
+  return uid;
+}
+
 void RtApiCore :: probeDevices( void )
 {
   // See list of required functionality in RtApi::probeDevices().
@@ -1165,6 +1182,9 @@ void RtApiCore :: probeDevices( void )
       if ( probeDeviceInfo( ids[n], info ) == false ) continue; // ignore if probe fails
       deviceIds_.push_back( ids[n] );
       info.ID = currentDeviceId_++;  // arbitrary internal device ID
+      const std::string uid = coreAudioDeviceUid( ids[n] );
+      if ( info.inputChannels > 0 ) info.inputUid = uid;
+      if ( info.outputChannels > 0 ) info.outputUid = uid;
       deviceList_.push_back( info );
       // We could set a property listener here for each device to know
       // if it is removed. However, we cannot detect (AFAIK) when a new
@@ -5070,6 +5090,8 @@ void RtApiWasapi::probeDevices( void )
       if ( probeDeviceInfo( info, (LPWSTR) temp.c_str(), ids[n].second ) == false ) continue; // ignore if probe fails
       deviceIds_.push_back( ids[n] );
       info.ID = currentDeviceId_++;  // arbitrary internal device ID
+      if ( ids[n].second ) info.inputUid = ids[n].first;
+      else info.outputUid = ids[n].first;
       deviceList_.push_back( info );
     }
   }
@@ -8015,6 +8037,8 @@ void RtApiAlsa :: probeDevices( void )
     info.name = d.second;
     if ( probeDeviceInfo( info, d.first ) == false ) continue; // ignore if probe fails
     info.ID = currentDeviceId_++;  // arbitrary internal device ID
+    if ( info.outputChannels > 0 ) info.outputUid = d.first;
+    if ( info.inputChannels > 0 ) info.inputUid = d.first;
     if ( info.name == defaultDeviceName ) {
       if ( info.outputChannels > 0 ) info.isDefaultOutput = true;
       if ( info.inputChannels > 0 ) info.isDefaultInput = true;
@@ -9219,6 +9243,7 @@ static void rt_pa_set_sink_info( pa_context * /*c*/, const pa_sink_info *i,
   RtAudio::DeviceInfo info;
   info.name = name;
   info.outputChannels = i->sample_spec.channels;
+  info.outputUid = i->name;
   info.preferredSampleRate = i->sample_spec.rate;
   info.isDefaultOutput = ( paProbeInfo->defaultSinkName == i->name );
   for ( const unsigned int *sr = SUPPORTED_SAMPLERATES; *sr; ++sr )
@@ -9253,6 +9278,7 @@ static void rt_pa_set_source_info_and_quit( pa_context * /*c*/, const pa_source_
         // This must be a duplex device. Update the device info.
         paProbeInfo->paDeviceList->at(n).sourceName = i->name;
         paProbeInfo->rtDeviceList->at(n).inputChannels = i->sample_spec.channels;
+        paProbeInfo->rtDeviceList->at(n).inputUid = i->name;
         paProbeInfo->rtDeviceList->at(n).isDefaultInput = ( paProbeInfo->defaultSourceName == i->name );
         paProbeInfo->rtDeviceList->at(n).duplexChannels = 
           (paProbeInfo->rtDeviceList->at(n).inputChannels < paProbeInfo->rtDeviceList->at(n).outputChannels)
@@ -9265,6 +9291,7 @@ static void rt_pa_set_source_info_and_quit( pa_context * /*c*/, const pa_source_
   RtAudio::DeviceInfo info;
   info.name = name;
   info.inputChannels = i->sample_spec.channels;
+  info.inputUid = i->name;
   info.preferredSampleRate = i->sample_spec.rate;
   info.isDefaultInput = ( paProbeInfo->defaultSourceName == i->name );
   for ( const unsigned int *sr = SUPPORTED_SAMPLERATES; *sr; ++sr )
